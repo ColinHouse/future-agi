@@ -19,13 +19,34 @@ config:
   output: score
   eval_type_id: CustomCodeEval
   config: {}
+  function_params_schema:
+    normalize:
+      type: string
+      default: "none"
   config_params_desc:
     reference: Ground truth text
     hypothesis: OCR/ASR output text
+    normalize: "none (default) scores every character; basic maps full-width characters to ASCII and ignores punctuation and spaces"
   code: |
     def evaluate(input, output, expected, context, **kwargs):
-        reference = str(kwargs.get("reference", expected or "")).strip().lower()
-        hypothesis = str(kwargs.get("hypothesis", output or "")).strip().lower()
+        import re
+
+        normalize = str(kwargs.get("normalize") or "none").strip().lower()
+        if normalize not in ("none", "basic"):
+            return {"score": 0.0, "reason": "normalize must be none or basic"}
+
+        def chars_of(value):
+            text = str(value).strip().lower()
+            if normalize == "basic":
+                # Full-width ASCII to ASCII; punctuation and spacing are not
+                # recognition errors, so drop both. Word characters such as 々 and ー stay.
+                text = re.sub("[\uff01-\uff5e]", lambda m: chr(ord(m.group()) - 0xFEE0), text)
+                text = re.sub(r"[!-/:-@\[-`{-~\u2010-\u2027\u2030-\u205e\u3001-\u3003\u3008-\u3011\u3014-\u301f\u3030\u303d\u30fb\uff61-\uff65]", " ", text)
+                text = "".join(text.split())
+            return text
+
+        reference = chars_of(kwargs.get("reference", expected or ""))
+        hypothesis = chars_of(kwargs.get("hypothesis", output or ""))
         if not reference and not hypothesis:
             return {"score": 1.0, "reason": "CER: 0.0% (both empty)"}
         if not reference:

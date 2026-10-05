@@ -19,15 +19,48 @@ config:
   output: score
   eval_type_id: CustomCodeEval
   config: {}
+  function_params_schema:
+    normalize:
+      type: string
+      default: "none"
+    tokenize:
+      type: string
+      default: "word"
   config_params_desc:
     reference: Ground truth transcription
     hypothesis: ASR/STT output transcription
+    normalize: "none (default) scores the text as given; basic maps full-width characters to ASCII and turns punctuation into spaces first"
+    tokenize: "word (default) splits on spaces; auto also splits Chinese, Japanese and Korean into single characters; char scores characters, ignoring spaces"
   code: |
     def evaluate(input, output, expected, context, **kwargs):
+        import re
+
+        normalize = str(kwargs.get("normalize") or "none").strip().lower()
+        tokenize = str(kwargs.get("tokenize") or "word").strip().lower()
+        if normalize not in ("none", "basic"):
+            return {"score": 0.0, "reason": "normalize must be none or basic"}
+        if tokenize not in ("word", "auto", "char"):
+            return {"score": 0.0, "reason": "tokenize must be word, auto or char"}
+
+        def tokens_of(value):
+            text = str(value).strip().lower()
+            if normalize == "basic":
+                # Full-width ASCII to ASCII, then punctuation to spaces (as Whisper's
+                # basic normalizer does). Word characters such as 々 and ー stay.
+                text = re.sub("[\uff01-\uff5e]", lambda m: chr(ord(m.group()) - 0xFEE0), text)
+                text = re.sub(r"[!-/:-@\[-`{-~\u2010-\u2027\u2030-\u205e\u3001-\u3003\u3008-\u3011\u3014-\u301f\u3030\u303d\u30fb\uff61-\uff65]", " ", text)
+            if tokenize == "char":
+                return [c for c in text if not c.isspace()]
+            if tokenize == "auto":
+                # Chinese, Japanese and Korean are written without spaces between
+                # words, so score them per character.
+                text = re.sub(r"([\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af])", r" \1 ", text)
+            return text.split()
+
         reference = kwargs.get("reference", expected or "")
         hypothesis = kwargs.get("hypothesis", output or "")
-        ref_words = str(reference).strip().lower().split()
-        hyp_words = str(hypothesis).strip().lower().split()
+        ref_words = tokens_of(reference)
+        hyp_words = tokens_of(hypothesis)
         if not ref_words and not hyp_words:
             return {"score": 1.0, "reason": "WER: 0.0% (both empty)"}
         if not ref_words:
