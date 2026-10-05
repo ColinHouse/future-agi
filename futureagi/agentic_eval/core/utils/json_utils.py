@@ -13,23 +13,26 @@ def extract_dict_from_string(input_str: str) -> dict[str, Any]:
             "Unable to generate a response at this time. Please check your input for accuracy."
         )
 
-    json_str = (
-        match.group(0)
-        .strip()
-        .replace("\n", "")
-        .replace("\r", "")
-        .replace("\t", "")
-        .replace("\\r", "")
-        .replace("\\t", "")
-    )
-
+    candidate = match.group(0).strip()
     try:
-        value = json.loads(json_str)
+        # Valid JSON as-is. The cleanup below is for malformed output only: it
+        # would also strip escapes such as "\\t" in "\\times" or "C:\\temp".
+        value = json.loads(candidate)
     except json.JSONDecodeError:
+        json_str = (
+            candidate.replace("\n", "")
+            .replace("\r", "")
+            .replace("\t", "")
+            .replace("\\r", "")
+            .replace("\\t", "")
+        )
         try:
-            value = json.loads(json_str.replace("'", '"'))
+            value = json.loads(json_str)
         except json.JSONDecodeError:
-            value = JsonHelper.extract_json_from_text(json_str)
+            try:
+                value = json.loads(json_str.replace("'", '"'))
+            except json.JSONDecodeError:
+                value = JsonHelper.extract_json_from_text(json_str)
 
     if not isinstance(value, dict):
         raise ValueError("Extracted string is not valid Response.")
