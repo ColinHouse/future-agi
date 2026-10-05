@@ -285,6 +285,7 @@ def main():
         "_print_": print_factory,
         "_inplacevar_": safe_inplace,
         "_iter_unpack_sequence_": guarded_unpack_sequence,
+        "_unpack_sequence_": guarded_unpack_sequence,
     }}
 
     try:
