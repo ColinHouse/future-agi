@@ -13,6 +13,7 @@ The fix involves:
 
 import pytest
 import copy
+from unittest.mock import patch
 
 # Import the audio utilities directly (no Django dependency)
 from agentic_eval.core.llm.audio_utils import (
@@ -88,6 +89,18 @@ class TestIsAudioUrl:
     def test_plain_text(self):
         """Test plain text (should return False)."""
         assert is_audio_url("just some text") is False
+
+    def test_signed_url_with_query_string(self):
+        """Presigned S3 and Azure SAS URLs carry the signature after the path."""
+        url = (
+            "https://bucket.s3.amazonaws.com/calls/rec.wav"
+            "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=abc123"
+        )
+        assert is_audio_url(url) is True
+
+    def test_url_with_fragment(self):
+        """A media fragment such as #t=10 follows the path."""
+        assert is_audio_url("https://example.com/audio/sample.mp3#t=10") is True
 
 
 class TestMessagesContainAudio:
@@ -282,6 +295,30 @@ class TestPreprocessMessagesForProvider:
         assert content[0]["type"] == "text"
         assert content[1]["type"] == "input_audio"
         assert content[2]["type"] == "input_audio"
+
+    def test_openai_signed_url_keeps_its_audio_format(self):
+        """The format sent to OpenAI comes from the URL path, not the signature
+        after it, and the download still uses the full signed URL."""
+        url = "https://bucket.s3.amazonaws.com/calls/rec.wav?X-Amz-Signature=abc123"
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "audio_content", "audio_content": {"url": url}}],
+            }
+        ]
+        with patch(
+            "agentic_eval.core.llm.audio_utils._download_audio_to_base64",
+            return_value="UklGRg==",
+        ) as download:
+            result = preprocess_messages_for_provider(messages, "openai")
+
+        download.assert_called_once_with(url)
+        assert result[0]["content"] == [
+            {
+                "type": "input_audio",
+                "input_audio": {"data": "UklGRg==", "format": "wav"},
+            }
+        ]
 
 
 class TestRegressionCOREBACKENDYR0:

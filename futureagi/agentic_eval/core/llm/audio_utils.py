@@ -16,6 +16,7 @@ Solution:
 """
 
 from typing import Any, Dict, List
+from urllib.parse import urlsplit
 import copy
 import structlog
 
@@ -48,7 +49,7 @@ AUDIO_EXTENSIONS = (".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".webm", ".
 
 def _get_audio_format_from_url(url: str) -> str:
     """
-    Extract audio format from URL extension.
+    Extract audio format from the extension of the URL's path.
 
     Args:
         url: The URL to check
@@ -56,9 +57,10 @@ def _get_audio_format_from_url(url: str) -> str:
     Returns:
         Audio format string (e.g., "mp3", "wav") or "mp3" as default
     """
-    lower_url = url.lower()
+    # Presigned S3 and Azure SAS URLs put the signature after the path.
+    path = urlsplit(url).path.lower()
     for ext in AUDIO_EXTENSIONS:
-        if lower_url.endswith(ext):
+        if path.endswith(ext):
             return ext[1:]  # Remove the leading dot
     return "mp3"  # Default
 
@@ -100,9 +102,9 @@ def is_audio_url(url: str) -> bool:
     if url.startswith("data:audio/"):
         return True
 
-    # Check file extensions
-    lower_url = url.lower()
-    return any(lower_url.endswith(ext) for ext in AUDIO_EXTENSIONS)
+    # Check the path's extension; a query string or fragment can follow it
+    path = urlsplit(url).path.lower()
+    return any(path.endswith(ext) for ext in AUDIO_EXTENSIONS)
 
 
 def messages_contain_audio(messages: Messages) -> bool:
