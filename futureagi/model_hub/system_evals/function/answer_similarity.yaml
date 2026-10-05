@@ -139,8 +139,15 @@ config:
                     encoded.append(code)
                 return (first_letter + ''.join(encoded) + '000')[:4]
 
-            tokens1 = set(soundex(w) for w in re.findall(r'\b\w+\b', response.lower()))
-            tokens2 = set(soundex(w) for w in re.findall(r'\b\w+\b', expected_response.lower()))
+            def phonetic_key(word):
+                # Soundex only encodes English letters. Compare numbers and words
+                # in other scripts as written instead of collapsing them to one code.
+                if word.isalpha() and word[0].isascii():
+                    return soundex(word)
+                return word
+
+            tokens1 = set(phonetic_key(w) for w in re.findall(r'\b\w+\b', response.lower()))
+            tokens2 = set(phonetic_key(w) for w in re.findall(r'\b\w+\b', expected_response.lower()))
 
             if not tokens1 and not tokens2:
                 score = 1.0
