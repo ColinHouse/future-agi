@@ -1397,10 +1397,28 @@ GRPC_FRAMEWORK = {
     ],
 }
 
+
 # WebAuthn / Passkeys
-WEBAUTHN_RP_ID = os.getenv("WEBAUTHN_RP_ID", "localhost")
+def _webauthn_origin_and_rp_id(origin, rp_id, frontend_base_url):
+    """The origin the browser reports in a passkey ceremony, and the
+    relying-party ID (that origin's host). Explicit settings win; otherwise
+    both follow the UI address, with the Vite dev server as the last resort."""
+    if not origin:
+        ui = urlsplit(frontend_base_url)
+        origin = (
+            f"{ui.scheme}://{ui.netloc}"
+            if ui.scheme and ui.netloc
+            else "http://localhost:3031"
+        )
+    return origin, rp_id or urlsplit(origin).hostname or "localhost"
+
+
+WEBAUTHN_ORIGIN, WEBAUTHN_RP_ID = _webauthn_origin_and_rp_id(
+    os.getenv("WEBAUTHN_ORIGIN", "").strip(),
+    os.getenv("WEBAUTHN_RP_ID", "").strip(),
+    FRONTEND_BASE_URL,
+)
 WEBAUTHN_RP_NAME = os.getenv("WEBAUTHN_RP_NAME", "FutureAGI")
-WEBAUTHN_ORIGIN = os.getenv("WEBAUTHN_ORIGIN", "http://localhost:3031")
 
 # 2FA challenge token TTLs (seconds)
 TWO_FACTOR_CHALLENGE_TTL = 300  # 5 minutes

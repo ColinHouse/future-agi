@@ -84,6 +84,54 @@ def test_frontend_url_wins_over_app_url(frontend_url, expected):
     assert loaded.stdout.splitlines()[-1] == expected
 
 
+# WEBAUTHN_ORIGIN / WEBAUTHN_RP_ID: the browser reports the UI's own origin in
+# every passkey ceremony and py_webauthn rejects any other expected origin, so
+# unless they are set they follow the UI address instead of a fixed dev port.
+
+
+@pytest.mark.parametrize(
+    "env, expected",
+    [
+        # The compose default.
+        ({"APP_URL": "localhost:3000"}, "http://localhost:3000 localhost"),
+        # A public install; a path on the UI address is not part of an origin.
+        (
+            {"FRONTEND_URL": "https://ui.example.com/app"},
+            "https://ui.example.com ui.example.com",
+        ),
+        # Explicit settings win.
+        (
+            {
+                "APP_URL": "localhost:3000",
+                "WEBAUTHN_ORIGIN": "https://login.example.com",
+                "WEBAUTHN_RP_ID": "example.com",
+            },
+            "https://login.example.com example.com",
+        ),
+        # An explicit origin alone sets the RP ID as well.
+        (
+            {
+                "APP_URL": "localhost:3000",
+                "WEBAUTHN_ORIGIN": "https://login.example.com",
+            },
+            "https://login.example.com login.example.com",
+        ),
+        # No UI address at all: the Vite dev server.
+        ({}, "http://localhost:3031 localhost"),
+    ],
+)
+def test_passkey_origin_follows_the_ui_address(env, expected):
+    unset = {
+        "APP_URL": "",
+        "FRONTEND_URL": "",
+        "WEBAUTHN_ORIGIN": "",
+        "WEBAUTHN_RP_ID": "",
+    }
+    loaded = _load_settings(["WEBAUTHN_ORIGIN", "WEBAUTHN_RP_ID"], **{**unset, **env})
+    assert loaded.returncode == 0, loaded.stderr
+    assert loaded.stdout.splitlines()[-1] == expected
+
+
 # Only a Future AGI Cloud region (US, EU, DEV) is Cloud. Any other non-empty
 # CLOUD_DEPLOYMENT is a self-hosted install: it must not force reCAPTCHA on
 # (every login would be rejected without a key) nor select the Redis channel
