@@ -19,7 +19,7 @@ config:
   config_params_desc: {reference: Ground truth, hypothesis: ASR output, normalize: "none (default) scores the text as given; basic maps full-width characters to ASCII and turns punctuation into spaces first", tokenize: "word (default) splits on spaces; auto also splits Chinese, Japanese and Korean into single characters; char scores characters, ignoring spaces"}
   code: |
     def evaluate(input, output, expected, context, **kwargs):
-        def _align_counts(ref, hyp):
+        def align_counts(ref, hyp):
             n, m = len(ref), len(hyp)
             dp = [[0] * (m + 1) for _ in range(n + 1)]
             for i in range(n + 1): dp[i][0] = i
@@ -72,6 +72,6 @@ config:
         if not ref or not hyp:
             return {"score": 0.0, "reason": "WIL: 1 (one empty)"}
         n, m = len(ref), len(hyp)
-        hits, _, _, _ = _align_counts(ref, hyp)
+        hits = align_counts(ref, hyp)[0]
         wil = 1 - (hits / n) * (hits / m)
         return {"score": float(max(0.0, 1 - wil)), "reason": f"WIL: {wil:.4f} (H={hits}, |ref|={n}, |hyp|={m})"}

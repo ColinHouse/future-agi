@@ -169,3 +169,37 @@ def test_unknown_normalize_value_is_rejected(name):
     r = _run(name, "a b", "a b", normalize="nfkc")
     assert r["score"] == 0.0
     assert "normalize" in r["reason"]
+
+
+@pytest.mark.parametrize(
+    "name, reason",
+    [
+        # One substituted character (良 → 悪) out of 9, as in the tests above.
+        ("word_error_rate", "WER: 11.1% (1 edits / 9 words)"),
+        ("character_error_rate", "CER: 11.1% (1 edits / 9 chars)"),
+        ("match_error_rate", "MER: 11.1% (H=8, S=1, D=0, I=0)"),
+        ("word_info_lost", "WIL: 0.2099 (H=8, |ref|=9, |hyp|=9)"),
+        ("word_info_preserved", "WIP: 0.7901"),
+    ],
+)
+def test_bodies_run_in_the_local_fallback_runner(name, reason, settings, monkeypatch):
+    """A self-hosted install without the code executor can opt into the local
+    RestrictedPython runner, which rejects names starting with "_" and needs
+    its own guard for tuple unpacking. The bodies have to work there too."""
+    from agentic_eval.core_evals.fi_utils import sandbox
+
+    settings.CLOUD_DEPLOYMENT = ""
+    settings.CODE_EXECUTOR_LOCAL_FALLBACK = True
+    monkeypatch.setattr(sandbox, "CODE_EXECUTOR_URL", "")
+    code = yaml.safe_load((YAML_DIR / f"{name}.yaml").read_text())["config"]["code"]
+    inputs = {
+        "reference": "今日は良い天気です",
+        "hypothesis": "今日は悪い天気です",
+        "normalize": "basic",
+        "tokenize": "auto",
+    }
+
+    result = sandbox.execute_sandboxed_python(code, inputs, timeout=10)
+
+    assert result["status"] == "success", result
+    assert result["data"]["reason"] == reason
